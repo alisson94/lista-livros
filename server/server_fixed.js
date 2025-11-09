@@ -52,29 +52,8 @@ async function scrapeAmazonBooks(searchTerm) {
     await page.screenshot({ path: 'debug_amazon.png', fullPage: true });
     console.log('📸 Screenshot salva como debug_amazon.png');
     
-    // 🔍 PONTO DE PARADA PARA INSPEÇÃO MANUAL
-    // console.log('🛑 PÁGINA CARREGADA! Inspecione a Amazon no navegador que abriu.');
-    // console.log('🔍 Quando terminar a inspeção, pressione ENTER para continuar...');
-    
-    // // Aguardar input do usuário
-    // await new Promise((resolve) => {
-    //   const readline = require('readline');
-    //   const rl = readline.createInterface({
-    //     input: process.stdin,
-    //     output: process.stdout
-    //   });
-      
-    //   rl.question('Pressione ENTER para continuar o scraping: ', () => {
-    //     rl.close();
-    //     resolve();
-    //   });
-    // });
-    
-    // console.log('▶️ Continuando com o scraping...');
-    
     // Tentar diferentes seletores para os resultados
     let bookElements;
-
     try {
       await page.waitForSelector('[data-component-type="s-search-result"]', { timeout: 5000 });
       bookElements = '[data-component-type="s-search-result"]';
@@ -104,10 +83,11 @@ async function scrapeAmazonBooks(searchTerm) {
     }
     
     // Extrair dados dos livros com seletores mais flexíveis
-    console.log(`🔍 Iniciando extração com seletor: ${bookElements}`);
-    
     const books = await page.evaluate((selector) => {
+      console.log('🔍 Executando extração no navegador...');
       const elements = document.querySelectorAll(selector);
+      console.log(`📊 Encontrados ${elements.length} elementos`);
+      
       const results = [];
       
       elements.forEach((element, index) => {
@@ -133,108 +113,38 @@ async function scrapeAmazonBooks(searchTerm) {
             }
           }
           
-          // Múltiplas tentativas para autor (baseado na div a-row que você encontrou)
+          // Múltiplas tentativas para autor
           let author = '';
           const authorSelectors = [
-            '.a-section .a-row.a-size-base', // Nova tentativa com a-section
-            
+            '.a-size-base + .a-size-base .a-link-normal',
+            '[data-a-size="base"] .a-link-normal',
+            '.a-color-secondary .a-link-normal',
+            'span[data-a-size="base"] a',
+            '.s-link-style a'
           ];
           
           for (const sel of authorSelectors) {
             const authorEl = element.querySelector(sel);
             if (authorEl && authorEl.textContent.trim()) {
-              const authorText = authorEl.textContent.trim();
-              
-              // Extrair apenas o texto depois de "por"
-              if (authorText.includes('por')) {
-                // Método 1: Regex para capturar texto após "por"
-                const regexPatterns = [
-                  /por\s+([^|]+?)(?:\s*\||\s*$)/,          // "por Autor" até | ou fim
-                  /\|\s*por\s+([^|]+?)(?:\s*\||\s*$)/,     // "| por Autor" 
-                  /por\s+(.+?)(?:\s*\||\s*e\s|\s*$)/       // "por Autor" até "e" ou |
-                ];
-                
-                for (const regex of regexPatterns) {
-                  const match = authorText.match(regex);
-                  if (match && match[1]) {
-                    const extractedAuthor = match[1].trim();
-                    
-                    // Validar se é um autor válido
-                    if (extractedAuthor.length >= 2 && 
-                        extractedAuthor.length <= 80 &&
-                        !extractedAuthor.includes('R$') &&
-                        !extractedAuthor.includes('Edição')) {
-                      
-                      author = extractedAuthor;
-                      break;
-                    }
-                  }
-                }
-                
-                // Método 2: Split simples se regex não funcionou
-                if (!author) {
-                  const parts = authorText.split('por');
-                  if (parts.length > 1) {
-                    let afterPor = parts[1].trim();
-                    
-                    // Limpar até o primeiro "|" se houver
-                    if (afterPor.includes('|')) {
-                      afterPor = afterPor.split('|')[0].trim();
-                    }
-                    
-                    // Remover " e " do final se houver múltiplos autores
-                    afterPor = afterPor.replace(/\s+e\s*$/, '').trim();
-                    
-                    if (afterPor.length >= 2 && afterPor.length <= 80 && 
-                        !afterPor.includes('R$')) {
-                      author = afterPor;
-                    }
-                  }
-                }
-                
-                break; // Para na primeira a-row que contém "por"
-              }
+              author = authorEl.textContent.trim();
+              break;
             }
           }
           
           // Múltiplas tentativas para preço
           let price = '';
           const priceSelectors = [
-            '.a-price .a-offscreen',
             '.a-price-whole',
-            '.a-color-price .a-offscreen',
-            '.a-price-range .a-offscreen',
-            'span.a-price.a-text-price.a-size-medium.a-color-base .a-offscreen'
+            '.a-price .a-offscreen',
+            '.a-color-price',
+            '.a-price-range'
           ];
           
           for (const sel of priceSelectors) {
             const priceEl = element.querySelector(sel);
             if (priceEl && priceEl.textContent.trim()) {
-              const priceText = priceEl.textContent.trim();
-              // Validar se realmente é um preço
-              if (priceText.includes('R$') || priceText.includes('$')) {
-                price = priceText;
-                break;
-              }
-            }
-          }
-          
-          // Se não encontrou preço específico, tentar alternativas
-          if (!price) {
-            const fallbackPriceSelectors = [
-              '.a-price',
-              '[class*="price"]'
-            ];
-            
-            for (const sel of fallbackPriceSelectors) {
-              const priceEl = element.querySelector(sel);
-              if (priceEl) {
-                const priceText = priceEl.textContent.trim();
-                if ((priceText.includes('R$') || priceText.includes('$')) && priceText.length < 50) {
-                  price = priceText;
-                  break;
-                }
-              }
+              price = priceEl.textContent.trim();
+              break;
             }
           }
           
@@ -243,12 +153,14 @@ async function scrapeAmazonBooks(searchTerm) {
           const rating = ratingEl ? ratingEl.textContent.trim() : '';
           
           // Link
-          const linkEl = element.querySelector('[data-cy="title-recipe"] a.a-link-normal.s-line-clamp-2') || element.querySelector('a[href*="/dp/"]');
+          const linkEl = element.querySelector('h2 a') || element.querySelector('a[href*="/dp/"]');
           const link = linkEl ? 'https://www.amazon.com.br' + linkEl.getAttribute('href') : '';
           
           // Imagem
           const imgEl = element.querySelector('.s-image') || element.querySelector('img');
           const image = imgEl ? imgEl.getAttribute('src') : '';
+          
+          console.log(`📖 Livro ${index + 1}: "${title}" por ${author}`);
           
           if (title && title.length > 3) {
             results.push({
@@ -264,25 +176,15 @@ async function scrapeAmazonBooks(searchTerm) {
             });
           }
         } catch (error) {
-          // Erro silencioso no navegador
+          console.error(`❌ Erro ao extrair livro ${index}:`, error);
         }
       });
       
-      return results;
+      console.log(`✅ Extraídos ${results.length} livros válidos`);
       return results;
     }, bookElements);
     
-    console.log(`✅ Retornaram ${books.length} livros do navegador`);
-    
-    // Log detalhado dos livros encontrados no servidor
-    if (books.length > 0) {
-      console.log('📚 Livros extraídos:');
-      books.forEach((book, index) => {
-        console.log(`  ${index + 1}. "${book.title}" - ${book.author} - ${book.price}`);
-      });
-    } else {
-      console.log('❌ Nenhum livro foi extraído. Verificando problemas...');
-    }
+    console.log(`✅ Encontrados ${books.length} livros`);
     return books;
     
   } catch (error) {
@@ -413,54 +315,13 @@ app.get('/api/debug/:term', async (req, res) => {
     
     const html = await page.content();
     
-    // Debug específico para seletores
-    const selectorDebug = await page.evaluate(() => {
-      const elements = document.querySelectorAll('[data-component-type="s-search-result"]');
-      if (elements.length === 0) return { error: 'Nenhum elemento encontrado' };
-      
-      const firstElement = elements[0];
-      const debug = {
-        titleElements: [],
-        authorElements: [],
-        priceElements: []
-      };
-      
-      // Debug títulos
-      const titleSelectors = ['h2 a span', 'h2 span', '.s-size-mini span'];
-      titleSelectors.forEach(sel => {
-        const el = firstElement.querySelector(sel);
-        if (el) debug.titleElements.push({ selector: sel, text: el.textContent.trim() });
-      });
-      
-      // Debug autores
-      const authorSelectors = [
-        'span[data-a-size="base"] .a-link-normal',
-        '.a-color-secondary .a-link-normal',
-        '.s-link-style a'
-      ];
-      authorSelectors.forEach(sel => {
-        const el = firstElement.querySelector(sel);
-        if (el) debug.authorElements.push({ selector: sel, text: el.textContent.trim() });
-      });
-      
-      // Debug preços
-      const priceSelectors = ['.a-price .a-offscreen', '.a-price-whole', '.a-color-price'];
-      priceSelectors.forEach(sel => {
-        const el = firstElement.querySelector(sel);
-        if (el) debug.priceElements.push({ selector: sel, text: el.textContent.trim() });
-      });
-      
-      return debug;
-    });
-    
     res.json({
       success: true,
       searchUrl,
       htmlLength: html.length,
       hasResults: html.includes('[data-component-type="s-search-result"]'),
       hasAlternativeResults: html.includes('.s-result-item'),
-      pageTitle: await page.title(),
-      selectorDebug
+      pageTitle: await page.title()
     });
     
   } catch (error) {
