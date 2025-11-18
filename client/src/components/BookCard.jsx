@@ -8,11 +8,22 @@ function BookCard({ book, children }){
 
     return(
         <div className="book-card">
-            <img src={imageUrl} alt={`Capa do livro: ${title}`} />
-            <div className="book-info">
-                <h3>{title}</h3>
-                <p>{Array.isArray(authors) ? authors.join(", ") : authors}</p>
-                {children}
+            <div className="cover">
+                <img 
+                    src={imageUrl} 
+                    alt={`Capa do livro: ${title}`}
+                />
+            </div>
+            <div className="card-body">
+                <h3 className="card-title line-clamp-2">
+                    {title}
+                </h3>
+                <p className="card-authors line-clamp-2">
+                    {Array.isArray(authors) ? authors.join(", ") : authors}
+                </p>
+                <div className="card-actions">
+                    {children}
+                </div>
             </div>
         </div>
     );

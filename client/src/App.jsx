@@ -11,14 +11,31 @@ function App() {
         const savedWishlist = localStorage.getItem("wishlist");
         return savedWishlist ? JSON.parse(savedWishlist) : [];
     });
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
         localStorage.setItem("wishlist", JSON.stringify(wishlist));
     }, [wishlist]);
 
     const handleSearch = async (query) => {
-        const results = await searchBooks(query);
-        setBooks(results);
+        setLoading(true);
+        setError(null);
+        setBooks([]);
+        
+        try {
+            const results = await searchBooks(query);
+            setBooks(results);
+            
+            if (results.length === 0) {
+                setError('Nenhum livro encontrado. Tente outra busca.');
+            }
+        } catch (err) {
+            setError('Erro ao buscar livros. Tente novamente.');
+            console.error('Erro na busca:', err);
+        } finally {
+            setLoading(false);
+        }
     }
 
     const handleAddToWishlist = (book) => {
@@ -33,21 +50,53 @@ function App() {
 
     return (
         <div className="app">
-            <header>
-                <h1>Minha lista de Livros</h1>
-                <SearchBar onSearch={handleSearch} />
+            <header className="app-header">
+                <div className="container">
+                    <h1 className="site-title">
+                        📚 Minha Lista de Livros
+                    </h1>
+                    <SearchBar onSearch={handleSearch} disabled={loading} />
+                </div>
             </header>
-            <main>
-                <section>
-                    <h2>Lista de Desejos</h2>
+            <main className="main container">
+                <section className="section">
+                    <h2 className="section-title">
+                        ⭐ Lista de Desejos
+                        <span className="count-badge">
+                            {wishlist.length} {wishlist.length === 1 ? 'livro' : 'livros'}
+                        </span>
+                    </h2>
                     <WishList books={wishlist} onRemoveFromWishlist={handleRemoveFromWishlist} />
                 </section>
                 
-                <hr />
+                <div className="divider"></div>
 
-                <section>
-                    <h2>Resultados Busca</h2>
-                    <BookList books={books} onAddToWishlist={handleAddToWishlist} />
+                <section className="section">
+                    <h2 className="section-title">
+                        🔍 Resultados da Busca
+                        <span className="count-badge">
+                            {books.length} {books.length === 1 ? 'livro' : 'livros'}
+                        </span>
+                    </h2>
+                    
+                    {loading && (
+                        <div className="loading-container">
+                            <div className="loading-spinner"></div>
+                            <p className="loading-text">
+                                🔍 Buscando livros na Amazon...
+                                <span className="loading-subtext">Isso pode levar alguns segundos</span>
+                            </p>
+                        </div>
+                    )}
+                    
+                    {error && (
+                        <div className="error-message">
+                            <span className="error-icon">⚠️</span>
+                            {error}
+                        </div>
+                    )}
+                    
+                    {!loading && !error && <BookList books={books} onAddToWishlist={handleAddToWishlist} />}
                 </section>
             </main>
         </div>

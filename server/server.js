@@ -19,7 +19,7 @@ async function scrapeAmazonBooks(searchTerm) {
     console.log(`🔍 Iniciando busca por: ${searchTerm}`);
     
     browser = await puppeteer.launch({
-      headless: false, // Para ver o navegador em ação
+      headless: true, // Para ver o navegador em ação
       args: [
         '--no-sandbox', 
         '--disable-setuid-sandbox',
